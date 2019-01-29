@@ -5,7 +5,7 @@ use std::io::BufReader;
 use std::io::BufRead;
 use std::fs::File;
 
-use std::io;
+//use std::io;
 use std::io::prelude::*;
 
 
@@ -168,13 +168,15 @@ impl DnaRead for FastaReader {
                         if line.starts_with(">") {
                             name.push_str(&line);
                             name.pop();
+                        } else if line.is_empty() {
+                            return None;
                         } else {
                             panic!("not fasta format?");
                         }
                     },
                     Err(_) => return None,
                 }
-                'line_iter: loop {
+                'line_iter2: loop {
                     let mut line = String::new();
                     match self.buf_reader.read_line(&mut line) {
                         Ok(_) => {
@@ -182,9 +184,9 @@ impl DnaRead for FastaReader {
                                 next_name.push_str(&line);
                                 next_name.pop();
                                 println!("trying to break2");
-                                break 'line_iter;
+                                break 'line_iter2;
                             }
-                            else if line.is_empty() { break 'line_iter; }
+                            else if line.is_empty() { break 'line_iter2; }
                             else {
                                 println!("pushing2 {}",line);
                                 seq.push_str(&line);
@@ -201,6 +203,8 @@ impl DnaRead for FastaReader {
         }
         if !next_name.is_empty() {
             self.last_name = Some(next_name);
+        } else {
+            self.last_name = None;
         }
         Some(DnaRecord{ name: name, seq: seq, qual: None })
 	}
@@ -243,7 +247,9 @@ impl DnaRead for SamReader {
 }
 
 mod tests {
+    #[allow(unused_imports)]
     use DnaReader;
+    #[allow(unused_imports)]
     use DnaRecord;
 
     #[test]
@@ -298,5 +304,9 @@ mod tests {
         };
         println!("{}",rec.seq);
         assert!("GGGGGGGGGGGGGGGGGGGG" == rec.seq);
+        match reader.next() {
+            Some(_) => panic!("there shouldnt be any more records"),
+            None => (),
+        }
     }
 }
