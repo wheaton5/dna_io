@@ -10,14 +10,14 @@ use std::io;
 use std::io::prelude::*;
 
 
-pub struct DnaRecord<'a> {
-    pub seq: &'a str,
-    //pub qual: Option<'a [u8]>,
-    pub name: &'a str,
+pub struct DnaRecord {
+    pub seq: Box<String>,
+    pub qual: Option<Box<String>>,
+    pub name: Box<String>,
 }
 
 pub trait DnaRead {
-    fn next(&self) -> Option<DnaRecord>;
+    fn next(&mut self) -> Option<DnaRecord>;
 }
 
 pub struct DnaReader {
@@ -26,7 +26,6 @@ pub struct DnaReader {
 
 impl DnaReader {
     fn from_path(filename: &str) -> Self {
-        //let filename = filename.to_string();
         let filetype = filename.split(".").collect::<Vec<&str>>();
         if filetype.len() < 2 {
             panic!("file {} has no extension");
@@ -71,9 +70,29 @@ impl FastqReader {
 }
 
 impl DnaRead for FastqReader {
-    fn next(&self) -> Option<DnaRecord> {
-		//unimplemented        
-		None
+    fn next(&mut self) -> Option<DnaRecord> {     
+        let mut name = String::new();
+        let mut seq = String::new();
+        let mut sep = String::new();
+        let mut qual = String::new();
+        match self.buf_reader.read_line(&mut name) {
+            Ok(_) => (),
+            Err(_) => return None,
+        }
+        match self.buf_reader.read_line(&mut seq) {
+       		Ok(_) => (),
+			Err(_) => return None, 
+        }
+		match self.buf_reader.read_line(&mut sep) {
+			Ok(_) => (),
+			Err(_) => return None,
+		}
+		match self.buf_reader.read_line(&mut qual) {
+			Ok(_) => (),
+			Err(_) => return None,
+		}
+		Some(DnaRecord{ name: Box::new(name), seq: Box::new(seq), qual: Some(Box::new(qual))})
+        
     }
 }
 
@@ -101,7 +120,7 @@ impl FastaReader {
 }
 
 impl DnaRead for FastaReader {
-	fn next(&self) -> Option<DnaRecord> {
+	fn next(&mut self) -> Option<DnaRecord> {
 		//unimplemented
 		None
 	}
@@ -119,7 +138,7 @@ impl BamReader {
 }
 
 impl DnaRead for BamReader {
-    fn next(&self) -> Option<DnaRecord> {
+    fn next(&mut self) -> Option<DnaRecord> {
         //unimplemented
         None
     }
@@ -137,7 +156,7 @@ impl SamReader {
 }
 
 impl DnaRead for SamReader {
-    fn next(&self) -> Option<DnaRecord> {
+    fn next(&mut self) -> Option<DnaRecord> {
         //unimplemented
         None
     }
