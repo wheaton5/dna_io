@@ -1,12 +1,25 @@
 extern crate flate2;
+extern crate rust_htslib;
+
+use rust_htslib::bam;
+//use rust_htslib::prelude::*;
+
 use flate2::read::GzDecoder;
 
 use std::io::BufReader;
 use std::io::BufRead;
 use std::fs::File;
 
+
+//use rust_htslib::bam::Records;
+use rust_htslib::bam::Record;
+//use rust_htslib::bam::Reader;
+use rust_htslib::bam::record::*;
+use rust_htslib::bam::Read;
+//use rust_htslib::prelude::*;
 //use std::io;
-use std::io::prelude::*;
+//use std::io::prelude::*;
+//use std::io::Read;
 
 
 pub struct DnaRecord {
@@ -49,7 +62,7 @@ impl DnaReader {
 }
 
 pub struct FastqReader {
-    pub buf_reader: BufReader<Box<Read>>,
+    pub buf_reader: BufReader<Box<std::io::Read>>,
 }
 
 impl FastqReader {
@@ -62,7 +75,7 @@ impl FastqReader {
         };
         let filetype = filename.split(".").collect::<Vec<&str>>();
         let filetype = filetype[filetype.len()-1];
-        let reader: Box<Read> = match filetype {
+        let reader: Box<std::io::Read> = match filetype {
             "gz" => Box::new(GzDecoder::new(file)),
             _ => Box::new(file),
         };
@@ -103,7 +116,7 @@ impl DnaRead for FastqReader {
 }
 
 pub struct FastaReader {
-    pub buf_reader: BufReader<Box<Read>>,
+    pub buf_reader: BufReader<Box<std::io::Read>>,
     pub last_name: Option<String>,
 }
 
@@ -117,7 +130,7 @@ impl FastaReader {
         };
         let filetype = filename.split(".").collect::<Vec<&str>>();
         let filetype = filetype[filetype.len()-1];
-        let reader: Box<Read> = match filetype {
+        let reader: Box<std::io::Read> = match filetype {
             "gz" => Box::new(GzDecoder::new(file)),
             _ => Box::new(file),
         };
@@ -211,20 +224,39 @@ impl DnaRead for FastaReader {
 }
 
 pub struct BamReader {
-	//unimplemented
+    pub reader: bam::Reader,
 }
 
 impl BamReader {
-	//unimplemented
     fn new(filename: &str) -> Self {
-        BamReader {}
+        let bam = bam::Reader::from_path(filename).unwrap();
+        BamReader { reader: bam }
     }
 }
 
 impl DnaRead for BamReader {
     fn next(&mut self) -> Option<DnaRecord> {
-        //unimplemented
-        None
+        let mut record = bam::record::Record::new();
+		match self.reader.read(&mut record) {
+            Err(bam::ReadError::NoMoreRecord) => return None,
+            Ok(_x) => (),//Some(Ok(x)),
+            Err(_err) => panic!("bam error, im lazy and cant be bothered to make good error messages"),
+        }
+        //let record = match record {
+        //    Some(x) => x,
+        //    None => return None,
+        //};
+        //let record = match record {
+        //    Ok(x) => x,
+        //    Err(_) => panic!("jesus fucking christ"),
+        //};
+		
+        Some(DnaRecord{ 
+            name: String::from_utf8_lossy(record.qname()).to_string(), 
+            qual: Some(String::from_utf8_lossy(record.qual()).to_string()),
+            seq: String::from_utf8_lossy(&record.seq().as_bytes()).to_string(),
+        })
+            
     }
 }
 
@@ -234,7 +266,8 @@ pub struct SamReader {
 
 impl SamReader {
     //unimplemented
-    fn new(filename: &str) -> Self {
+    #[allow(dead_code)]
+    fn new(_filename: &str) -> Self {
         SamReader {}
     }
 }
@@ -308,5 +341,16 @@ mod tests {
             Some(_) => panic!("there shouldnt be any more records"),
             None => (),
         }
+    }
+
+    #[test]
+    fn test_bam() {
+        let mut reader = DnaReader::from_path("test/data/test.bam");
+        let rec = match reader.next() {
+            Some(x) => x,
+            None => panic!("bam reader doesnt work"),
+        };
+        println!("{}",rec.seq);
+        assert!("GTCCTAAAACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAAACCTAACCCTAACCATACCCATAACCCCAACCCTAACACTAACCCCAAACCCAACCATAACCAACACCCCACACCTA" == rec.seq);
     }
 }
