@@ -1,4 +1,3 @@
-
 extern crate flate2;
 use flate2::read::GzDecoder;
 
@@ -105,6 +104,7 @@ impl DnaRead for FastqReader {
 
 pub struct FastaReader {
     pub buf_reader: BufReader<Box<Read>>,
+    pub last_name: Option<String>,
 }
 
 impl FastaReader {
@@ -122,14 +122,66 @@ impl FastaReader {
             _ => Box::new(file),
         };
         let reader = BufReader::new(reader);
-        FastaReader{ buf_reader: reader }
+        FastaReader{ buf_reader: reader , last_name: None}
     }
 }
 
 impl DnaRead for FastaReader {
 	fn next(&mut self) -> Option<DnaRecord> {
-		//unimplemented
-		None
+        let mut name = String::new();
+        let mut seq = String::new();
+        let mut next_name = String::new();
+
+        match self.last_name {
+            Some(ref my_name) => {
+                name.push_str(my_name);
+                loop {
+                    let mut line = String::new();
+                    match self.buf_reader.read_line(&mut line) {
+                        Ok(_) => {
+                            if line.starts_with(">") {
+                                next_name.push_str(&line);
+                                break;
+                            } else {
+                                seq.push_str(&line);
+                            }
+                        },
+                        Err(_) => return None,
+                   }      
+                }
+            },
+            None => {
+                let mut line = String::new();
+                match self.buf_reader.read_line(&mut line) {
+                    Ok(_) => {
+                        if line.starts_with(">") {
+                            name.push_str(&line);
+                        } else {
+                            panic!("not fasta format?");
+                        }
+                    },
+                    Err(_) => return None,
+                }
+                loop {
+                    let mut line = String::new();
+                    match self.buf_reader.read_line(&mut line) {
+                        Ok(_) => {
+                            if line.starts_with(">") {
+                                next_name.push_str(&line);
+                                break;
+                            } else {
+                                seq.push_str(&line);
+                            }
+                        },
+                        Err(_) => return None,
+                    }
+                }
+            },
+        }
+        if !next_name.is_empty() {
+            self.last_name = Some(next_name);
+        }
+        Some(DnaRecord{ name: name, seq: seq, qual: None })
 	}
 }
 
