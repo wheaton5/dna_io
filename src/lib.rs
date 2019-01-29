@@ -11,9 +11,9 @@ use std::io::prelude::*;
 
 
 pub struct DnaRecord {
-    pub seq: Box<String>,
-    pub qual: Option<Box<String>>,
-    pub name: Box<String>,
+    pub seq: String,
+    pub qual: Option<String>,
+    pub name: String,
 }
 
 pub trait DnaRead {
@@ -43,6 +43,9 @@ impl DnaReader {
             _ => panic!("file extension type {} not accepted.",filetype[filetype.len()-1])
         };
         DnaReader{reader: reader}
+    }
+    fn next(&mut self) -> Option<DnaRecord> {
+        self.reader.next()
     }
 }
 
@@ -79,19 +82,23 @@ impl DnaRead for FastqReader {
             Ok(_) => (),
             Err(_) => return None,
         }
+        name.pop();
         match self.buf_reader.read_line(&mut seq) {
        		Ok(_) => (),
 			Err(_) => return None, 
         }
+        seq.pop();
 		match self.buf_reader.read_line(&mut sep) {
 			Ok(_) => (),
 			Err(_) => return None,
 		}
+
 		match self.buf_reader.read_line(&mut qual) {
 			Ok(_) => (),
 			Err(_) => return None,
 		}
-		Some(DnaRecord{ name: Box::new(name), seq: Box::new(seq), qual: Some(Box::new(qual))})
+        qual.pop();
+		Some(DnaRecord{ name: name, seq: seq, qual: Some(qual)})
         
     }
 }
@@ -163,8 +170,41 @@ impl DnaRead for SamReader {
 }
 
 mod tests {
+    use DnaReader;
+    use DnaRecord;
+
     #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
+    fn test_fastq() {
+        let mut reader = DnaReader::from_path("test/data/fastq.fastq");
+        let rec = match reader.next() {
+            Some(x) => x,
+            None => panic!("no records"),
+        };
+        println!("{}",rec.seq);
+        assert!("ACTGGTCA"==rec.seq);
+
+        let mut reader = DnaReader::from_path("test/data/fastq.fq");
+        let rec = match reader.next() {
+            Some(x) => x,
+            None => panic!("no records"),
+        };
+        println!("{}",rec.seq);
+        assert!("ACTGGTCA"==rec.seq);
+
+        let mut reader = DnaReader::from_path("test/data/fastq.fastq.gz");
+        let rec = match reader.next() {
+            Some(x) => x,
+            None => panic!("no records"),
+        };
+        println!("{}",rec.seq);
+        assert!("ACTGGTCA"==rec.seq);
+
+        let mut reader = DnaReader::from_path("test/data/fastq.fq.gz");
+        let rec = match reader.next() {
+            Some(x) => x,
+            None => panic!("no records"),
+        };
+        println!("{}",rec.seq);
+        assert!("ACTGGTCA"==rec.seq); 
     }
 }
