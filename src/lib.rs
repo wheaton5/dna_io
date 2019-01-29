@@ -135,18 +135,29 @@ impl DnaRead for FastaReader {
         match self.last_name {
             Some(ref my_name) => {
                 name.push_str(my_name);
-                loop {
+                'line_iter: loop {
                     let mut line = String::new();
                     match self.buf_reader.read_line(&mut line) {
                         Ok(_) => {
                             if line.starts_with(">") {
                                 next_name.push_str(&line);
-                                break;
-                            } else {
+                                next_name.pop();
+                                println!("trying to break");
+                                break 'line_iter;
+                            }
+                            else if line.is_empty() {
+                                break 'line_iter; 
+                            }
+                            else {
+                                println!("pushing {}",line);
                                 seq.push_str(&line);
+                                seq.pop();
                             }
                         },
-                        Err(_) => return None,
+                        Err(_) => {
+                            println!("trying to return");
+                            return None;
+                        },
                    }      
                 }
             },
@@ -156,24 +167,34 @@ impl DnaRead for FastaReader {
                     Ok(_) => {
                         if line.starts_with(">") {
                             name.push_str(&line);
+                            name.pop();
                         } else {
                             panic!("not fasta format?");
                         }
                     },
                     Err(_) => return None,
                 }
-                loop {
+                'line_iter: loop {
                     let mut line = String::new();
                     match self.buf_reader.read_line(&mut line) {
                         Ok(_) => {
                             if line.starts_with(">") {
                                 next_name.push_str(&line);
-                                break;
-                            } else {
+                                next_name.pop();
+                                println!("trying to break2");
+                                break 'line_iter;
+                            }
+                            else if line.is_empty() { break 'line_iter; }
+                            else {
+                                println!("pushing2 {}",line);
                                 seq.push_str(&line);
+                                seq.pop();
                             }
                         },
-                        Err(_) => return None,
+                        Err(_) => {
+                            println!("trying to return 2");
+                            return None;
+                        },
                     }
                 }
             },
@@ -258,5 +279,24 @@ mod tests {
         };
         println!("{}",rec.seq);
         assert!("ACTGGTCA"==rec.seq); 
+    }
+
+    #[test]
+    fn test_fasta() {
+        let mut reader = DnaReader::from_path("test/data/fasta.fasta");
+        println!("about to");
+        let rec = match reader.next() {
+            Some(x) => x,
+            None => panic!("no records"),
+        };
+        println!("{}",rec.seq);
+        assert!("ACGTTTTTTTTTTTTTTACGT" == rec.seq);
+        println!("done with firts");
+        let rec = match reader.next() {
+            Some(x) => x,
+            None => panic!("no second record"),
+        };
+        println!("{}",rec.seq);
+        assert!("GGGGGGGGGGGGGGGGGGGG" == rec.seq);
     }
 }
