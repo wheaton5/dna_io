@@ -56,7 +56,7 @@ impl DnaReader {
         };
         DnaReader{reader: reader}
     }
-    fn next(&mut self) -> Option<DnaRecord> {
+    pub fn next(&mut self) -> Option<DnaRecord> {
         self.reader.next()
     }
 }
@@ -110,8 +110,7 @@ impl DnaRead for FastqReader {
 			Err(_) => return None,
 		}
         qual.pop();
-		Some(DnaRecord{ name: name, seq: seq, qual: Some(qual)})
-        
+		Some(DnaRecord{ name: name, seq: seq, qual: Some(qual)})        
     }
 }
 
