@@ -37,7 +37,7 @@ pub struct DnaReader {
 }
 
 impl DnaReader {
-    fn from_path(filename: &str) -> Self {
+    pub fn from_path(filename: &str) -> Self {
         let filetype = filename.split(".").collect::<Vec<&str>>();
         if filetype.len() < 2 {
             panic!("file {} has no extension");
