@@ -49,9 +49,6 @@ impl DnaReader {
         };
         DnaReader{reader: reader}
     }
-    //pub fn next(&mut self) -> Option<DnaRecord> {
-    //    self.reader.next()
-    //}
 }
 
 impl Iterator for DnaReader {
@@ -91,22 +88,21 @@ impl DnaRead for FastqReader {
         let mut sep = String::new();
         let mut qual = String::new();
         match self.buf_reader.read_line(&mut name) {
-            Ok(_) => (),
+            Ok(x) => match x {0 => return None, _ => ()},
             Err(_) => return None,
         }
         name.pop();
         match self.buf_reader.read_line(&mut seq) {
-       		Ok(_) => (),
+       		Ok(x) => match x {0 => return None, _ => ()},
 			Err(_) => return None, 
         }
         seq.pop();
 		match self.buf_reader.read_line(&mut sep) {
-			Ok(_) => (),
+			Ok(x) => match x {0 => return None, _ => ()},
 			Err(_) => return None,
 		}
-
 		match self.buf_reader.read_line(&mut qual) {
-			Ok(_) => (),
+			Ok(x) => match x {0 => return None, _ => ()},
 			Err(_) => return None,
 		}
         qual.pop();
@@ -241,15 +237,6 @@ impl DnaRead for BamReader {
             Ok(_x) => (),//Some(Ok(x)),
             Err(_err) => panic!("bam error, im lazy and cant be bothered to make good error messages"),
         }
-        //let record = match record {
-        //    Some(x) => x,
-        //    None => return None,
-        //};
-        //let record = match record {
-        //    Ok(x) => x,
-        //    Err(_) => panic!("jesus fucking christ"),
-        //};
-		
         Some(DnaRecord{ 
             name: String::from_utf8_lossy(record.qname()).to_string(), 
             qual: Some(String::from_utf8_lossy(record.qual()).to_string()),
@@ -267,6 +254,7 @@ impl SamReader {
     //unimplemented
     #[allow(dead_code)]
     fn new(_filename: &str) -> Self {
+        panic!("sam reader unimplemented, sorry");
         SamReader {}
     }
 }
@@ -274,6 +262,7 @@ impl SamReader {
 impl DnaRead for SamReader {
     fn next(&mut self) -> Option<DnaRecord> {
         //unimplemented
+        panic!("sam reader unimplemented, sorry");
         None
     }
 }
@@ -293,6 +282,11 @@ mod tests {
         };
         println!("{}",rec.seq);
         assert!("ACTGGTCA"==rec.seq);
+        reader.next();
+        match reader.next() {
+            Some(_) => panic!("should not be any more records"),
+            None => (),
+        }
 
         let mut reader = DnaReader::from_path("test/data/fastq.fq");
         let rec = match reader.next() {
