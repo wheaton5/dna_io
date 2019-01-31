@@ -2,7 +2,6 @@ extern crate flate2;
 extern crate rust_htslib;
 
 use rust_htslib::bam;
-//use rust_htslib::prelude::*;
 
 use flate2::read::GzDecoder;
 
@@ -11,15 +10,9 @@ use std::io::BufRead;
 use std::fs::File;
 
 
-//use rust_htslib::bam::Records;
 use rust_htslib::bam::Record;
-//use rust_htslib::bam::Reader;
 use rust_htslib::bam::record::*;
 use rust_htslib::bam::Read;
-//use rust_htslib::prelude::*;
-//use std::io;
-//use std::io::prelude::*;
-//use std::io::Read;
 
 
 pub struct DnaRecord {
@@ -56,7 +49,14 @@ impl DnaReader {
         };
         DnaReader{reader: reader}
     }
-    pub fn next(&mut self) -> Option<DnaRecord> {
+    //pub fn next(&mut self) -> Option<DnaRecord> {
+    //    self.reader.next()
+    //}
+}
+
+impl Iterator for DnaReader {
+    type Item = DnaRecord;
+    fn next(&mut self) -> Option<DnaRecord> {
         self.reader.next()
     }
 }
