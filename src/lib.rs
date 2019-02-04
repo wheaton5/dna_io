@@ -504,9 +504,28 @@ mod tests {
         let mut file = File::open("test/data/fastq.fastq").expect("test data not available");
         let mut contents = String::new();
         file.read_to_string(&mut contents).expect("cant read test data");
-        let mut file2 = File::open("test/data/fastq.fastq").expect("written test data not available");
+        let mut file2 = File::open("test/data/fastq_written.fastq").expect("written test data not available");
         let mut contents2 = String::new();
         file2.read_to_string(&mut contents2).expect("cant read written test data");
         assert!(contents == contents2);
     }
+    
+    #[test]
+    fn test_write_fasta() {
+        let mut reader = DnaReader::from_path("test/data/fasta.fasta");
+        let mut writer = DnaWriter::from_reader("test/data/fasta_written.fasta",&reader);
+        for rec in reader {
+            writer.write(&rec).expect("failed to write fastq file in test");
+        }
+        flush(writer);
+        let reader = DnaReader::from_path("test/data/fasta.fasta");
+        let reader2 = DnaReader::from_path("test/data/fasta_written.fasta");
+        for (rec1, rec2) in reader.zip(reader2) {
+            assert!(rec1.seq == rec2.seq);
+            assert!(rec1.name == rec2.name);
+        }
+    }
+
+
+
 }
