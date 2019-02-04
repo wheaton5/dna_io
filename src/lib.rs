@@ -1,19 +1,38 @@
 extern crate flate2;
 extern crate rust_htslib;
 
-use rust_htslib::bam;
+use std::io::Error;
+//pub type Result<T> = Result<T, Error>;
 
 use flate2::read::GzDecoder;
+use flate2::write::GzEncoder;
 
 use std::io::BufReader;
+use std::io::BufWriter;
 use std::io::BufRead;
 use std::fs::File;
 
+use rust_htslib::sam;
+use rust_htslib::bam;
+use rust_htslib::prelude::*;
 
-use rust_htslib::bam::Record;
-use rust_htslib::bam::record::*;
-use rust_htslib::bam::Read;
+#[derive(Debug)]
+pub enum DnaFormat {
+    Fastq,
+    Fasta,
+    Bam, 
+    Sam,
+    Cram, 
+    TwoBit,
+}
+use DnaFormat::*;
 
+#[derive(Debug)]
+pub enum Compression {
+    Gzipped,
+    Uncompressed,
+}
+use Compression::*;
 
 pub struct DnaRecord {
     pub seq: String,
@@ -23,31 +42,83 @@ pub struct DnaRecord {
 
 pub trait DnaRead {
     fn next(&mut self) -> Option<DnaRecord>;
+    fn my_type(&self) -> DnaFormat;
+    fn header(&self) -> Option<bam::Header>;
+}
+
+pub trait DnaWrite {
+    fn write(&mut self, rec: &DnaRecord) -> Result<usize, Error>;
 }
 
 pub struct DnaReader {
     pub reader: Box<DnaRead>,
 }
 
+pub struct DnaWriter {
+    pub writer: Box<DnaWrite>,
+}
+
+fn check_extension(filename: &str) -> (DnaFormat, Compression) {
+    let filetype = filename.split(".").collect::<Vec<&str>>();
+    //if filetype.len() < 2 { panic!("file {} has no extension", filename); }
+    assert!(filetype.len() >= 2, "file {} has no extension", filename);
+    match filetype[filetype.len()-1] {
+        "gz" => {
+            assert!(filetype.len() >= 3, "gz file {} has no format extension", filename);
+            //if filetype.len() < 3 { panic!("gz file {} has no format extension", filename); }           
+            match filetype[filetype.len()-2] {
+                "fa" | "fasta" => (Fasta, Gzipped),
+                "fq" | "fastq" => (Fastq, Gzipped),
+                _ => panic!("format of file {} not supported",filename),
+            }
+        },
+        "fastq" | "fq" => (Fastq, Uncompressed),
+        "fasta" | "fa" => (Fasta, Uncompressed),
+        "sam" => (Sam, Uncompressed),
+        "bam" => (Bam, Gzipped), // this isnt strictly true, can have uncompressed bam, but bam library will deal with this
+        "cram" => (Cram, Gzipped), // same, also unimplemented
+        "2Bit" => (TwoBit, Uncompressed), //unimplemented
+        _ => panic!("format of file {} not supported ",filename),
+    }
+}
+
 impl DnaReader {
     pub fn from_path(filename: &str) -> Self {
-        let filetype = filename.split(".").collect::<Vec<&str>>();
-        if filetype.len() < 2 {
-            panic!("file {} has no extension");
-        }
-        let reader: Box<DnaRead> = match filetype[filetype.len()-1] {
-            "gz" => match filetype[filetype.len()-2] {
-                "fa" | "fasta" => Box::new(FastaReader::new(filename)),
-                "fq" | "fastq" => Box::new(FastqReader::new(filename)),
-                _ => panic!("file extension {}.{} not accepted",filetype[filetype.len()-1],filetype[filetype.len()-2])
-            }
-            "fastq" | "fq" => Box::new(FastqReader::new(filename)),
-            "fasta" | "fa" => Box::new(FastaReader::new(filename)),
-            "bam" => Box::new(BamReader::new(filename)),
-            "sam" => Box::new(SamReader::new(filename)),
-            _ => panic!("file extension type {} not accepted.",filetype[filetype.len()-1])
+        let (file_fmt, compression) = check_extension(filename);
+        let reader: Box<DnaRead> = match file_fmt {
+            Fasta => Box::new(FastaReader::new(filename, compression)),
+            Fastq => Box::new(FastqReader::new(filename, compression)),
+            Bam => Box::new(BamReader::new(filename)),
+            Sam => Box::new(SamReader::new(filename)),
+            _ => panic!("file extension type {:?} not accepted.",file_fmt),
         };
         DnaReader{reader: reader}
+    }
+    pub fn header(&self) -> Option<bam::Header> { self.reader.header() }
+    pub fn my_type(&self) -> DnaFormat { self.reader.my_type() }
+}
+
+// for now we will assume that output is not gz'ed. they may want to stream to another program
+impl DnaWriter {
+    pub fn from_reader(filename: &str, reader: &DnaReader) -> Self {
+        let writer: Box<DnaWrite> = match reader.my_type() {
+            Fastq => Box::new(FastqWriter::new(filename, Uncompressed)),
+            Fasta => Box::new(FastaWriter::new(filename, Uncompressed)),
+            Sam | Bam | Cram => Box::new(SamWriter::new(filename, reader)),
+            TwoBit => panic!("unimplemented"),
+        };
+        DnaWriter{ writer: writer }
+    }
+    pub fn from_path(filename: &str) -> Self {
+        let (file_fmt, compression) = check_extension(filename);
+        let writer: Box<DnaWrite> = match file_fmt {
+            Fasta => Box::new(FastaWriter::new(filename, compression)),
+            Fastq => Box::new(FastqWriter::new(filename, compression)),
+            Sam => panic!("require from_reader for sam, I dont know how to make headers"),//Box::new(SamWriter(filename)),
+            Bam => panic!("requires from_reader for bam writer, I dont know how to make headers"),//Box::new(BamWriter::new(filename, reader)),
+            _ => panic!("file extension type {:?} not accepted.",file_fmt),
+        };
+        DnaWriter{ writer: writer }
     }
 }
 
@@ -58,26 +129,41 @@ impl Iterator for DnaReader {
     }
 }
 
+fn get_reader(filename: &str, compression: Compression) -> BufReader<Box<std::io::Read>> {
+	let file = File::open(filename).expect("There was a problem opening the file");
+    let reader: Box<std::io::Read> = match compression {
+      	Gzipped => Box::new(GzDecoder::new(file)),
+        Uncompressed => Box::new(file),
+    };
+    BufReader::new(reader)
+}
+
+fn get_writer(filename: &str, compression: Compression) -> BufWriter<Box<std::io::Write>> {
+	let file = File::create(filename).expect("Unable to create file");
+    let writer: Box<std::io::Write> = match compression {
+        Gzipped => Box::new(GzEncoder::new(file, flate2::Compression::default())),
+        Uncompressed => Box::new(file),
+    };
+    BufWriter::new(writer)
+}
+
 pub struct FastqReader {
     pub buf_reader: BufReader<Box<std::io::Read>>,
 }
 
+pub struct FastqWriter {
+    pub buf_writer: BufWriter<Box<std::io::Write>>,
+}
+
 impl FastqReader {
-    fn new(filename: &str) -> Self {
-        let file = match File::open(filename.to_string()) {
-            Ok(file) => file,
-            Err(error) => {
-                panic!("There was a problem opening the file {} with error {}", filename, error)
-            },
-        };
-        let filetype = filename.split(".").collect::<Vec<&str>>();
-        let filetype = filetype[filetype.len()-1];
-        let reader: Box<std::io::Read> = match filetype {
-            "gz" => Box::new(GzDecoder::new(file)),
-            _ => Box::new(file),
-        };
-        let reader = BufReader::new(reader);
-        FastqReader{ buf_reader: reader }
+    fn new(filename: &str, compression: Compression) -> Self {
+        FastqReader{ buf_reader: get_reader(filename, compression) }
+    }
+}
+
+impl FastqWriter {
+    fn new(filename: &str, compression: Compression) -> Self {
+        FastqWriter{ buf_writer: get_writer(filename, compression) }
     }
 }
 
@@ -87,26 +173,26 @@ impl DnaRead for FastqReader {
         let mut seq = String::new();
         let mut sep = String::new();
         let mut qual = String::new();
-        match self.buf_reader.read_line(&mut name) {
-            Ok(x) => match x {0 => return None, _ => ()},
-            Err(_) => return None,
-        }
+        match self.buf_reader.read_line(&mut name).expect("Could not read file") {0 => return None, _ => ()};
         name.pop();
-        match self.buf_reader.read_line(&mut seq) {
-       		Ok(x) => match x {0 => return None, _ => ()},
-			Err(_) => return None, 
-        }
+        match self.buf_reader.read_line(&mut seq).expect("Could not read file") {0 => return None, _ => ()};
         seq.pop();
-		match self.buf_reader.read_line(&mut sep) {
-			Ok(x) => match x {0 => return None, _ => ()},
-			Err(_) => return None,
-		}
-		match self.buf_reader.read_line(&mut qual) {
-			Ok(x) => match x {0 => return None, _ => ()},
-			Err(_) => return None,
-		}
+		match self.buf_reader.read_line(&mut sep).expect("Could not read file") {0 => return None, _ => ()};
+		match self.buf_reader.read_line(&mut qual).expect("Could not read file") {0 => return None, _ => ()};
         qual.pop();
 		Some(DnaRecord{ name: name, seq: seq, qual: Some(qual)})        
+    }
+	fn my_type(&self) -> DnaFormat {
+		Fastq
+	}
+    fn header(&self) -> Option<bam::Header> {
+        None
+    }
+}
+
+impl DnaWrite for FastqWriter {
+    fn write(&mut self, rec: &DnaRecord) -> Result<usize, Error> {
+        panic!("unimplemented");
     }
 }
 
@@ -115,24 +201,22 @@ pub struct FastaReader {
     pub last_name: Option<String>,
 }
 
+pub struct FastaWriter {
+    pub buf_writer: BufWriter<Box<std::io::Write>>,
+}
+
 impl FastaReader {
-    fn new(filename: &str) -> Self {
-        let file = match File::open(filename.to_string()) {
-            Ok(file) => file,
-            Err(error) => {
-                panic!("There was a problem opening the file {} with error {}", filename, error)
-            },
-        };
-        let filetype = filename.split(".").collect::<Vec<&str>>();
-        let filetype = filetype[filetype.len()-1];
-        let reader: Box<std::io::Read> = match filetype {
-            "gz" => Box::new(GzDecoder::new(file)),
-            _ => Box::new(file),
-        };
-        let reader = BufReader::new(reader);
-        FastaReader{ buf_reader: reader , last_name: None}
+    fn new(filename: &str, compression: Compression) -> Self {
+        FastaReader{ buf_reader: get_reader(filename, compression) , last_name: None}
     }
 }
+
+impl FastaWriter {
+	fn new(filename: &str, compression: Compression) -> Self {
+		FastaWriter{ buf_writer: get_writer(filename, compression) }
+	}
+}
+
 
 impl DnaRead for FastaReader {
 	fn next(&mut self) -> Option<DnaRecord> {
@@ -216,10 +300,22 @@ impl DnaRead for FastaReader {
         }
         Some(DnaRecord{ name: name, seq: seq, qual: None })
 	}
+    fn header(&self) -> Option<bam::Header> { None }
+    fn my_type(&self) -> DnaFormat { Fasta }
+}
+
+impl DnaWrite for FastaWriter {
+	fn write(&mut self, rec: &DnaRecord) -> Result<usize, Error> {
+		panic!("unimplemented");
+	}
 }
 
 pub struct BamReader {
     pub reader: bam::Reader,
+}
+
+pub struct BamWriter {
+	pub writer: bam::Writer,
 }
 
 impl BamReader {
@@ -227,6 +323,14 @@ impl BamReader {
         let bam = bam::Reader::from_path(filename).unwrap();
         BamReader { reader: bam }
     }
+}
+
+impl BamWriter {
+	fn new(filename: &str, template: bam::Reader) -> Self {
+		let header = bam::Header::from_template(template.header());
+		let mut bam = bam::Writer::from_path(&"test/out.bam", &header).expect("could not open bam for writing");
+		BamWriter{ writer: bam }
+	}
 }
 
 impl DnaRead for BamReader {
@@ -244,10 +348,22 @@ impl DnaRead for BamReader {
         })
             
     }
+    fn my_type(&self) -> DnaFormat { Bam }
+    fn header(&self) -> Option<bam::Header> { Some(bam::Header::from_template(self.reader.header())) }
+}
+
+impl DnaWrite for BamWriter {
+	fn write(&mut self, rec: &DnaRecord) -> Result<usize, Error> {
+		panic!("unimplemented");
+	}
 }
 
 pub struct SamReader {
 	//unimplemented
+}
+
+pub struct SamWriter {
+	writer: sam::Writer,
 }
 
 impl SamReader {
@@ -255,16 +371,34 @@ impl SamReader {
     #[allow(dead_code)]
     fn new(_filename: &str) -> Self {
         panic!("sam reader unimplemented, sorry");
-        SamReader {}
+        //SamReader {}
     }
+}
+
+impl SamWriter {
+	fn new(filename: &str, template: &DnaReader) -> Self {
+		let header = match template.header() {
+            Some(x) => x,
+            None => panic!("i have no header for template"),
+        };
+		let writer = sam::Writer::from_path(filename, &header).expect("could not open sam file for writing");
+        SamWriter{ writer: writer }
+	}
 }
 
 impl DnaRead for SamReader {
     fn next(&mut self) -> Option<DnaRecord> {
         //unimplemented
         panic!("sam reader unimplemented, sorry");
-        None
     }
+    fn my_type(&self) -> DnaFormat { Sam }
+    fn header(&self) -> Option<bam::Header> { None }
+}
+
+impl DnaWrite for SamWriter {
+	fn write(&mut self, rec: &DnaRecord) -> Result<usize, Error> {
+		panic!("unimplemented");
+	}
 }
 
 mod tests {
