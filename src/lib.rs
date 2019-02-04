@@ -326,7 +326,7 @@ pub struct BamWriter {
 
 impl BamReader {
     fn new(filename: &str) -> Self {
-        let bam = bam::Reader::from_path(filename).unwrap();
+        let bam = bam::Reader::from_path(filename).expect("could not open file for bam reading");
         BamReader { reader: bam }
     }
 }
@@ -365,7 +365,7 @@ impl DnaWrite for BamWriter {
 }
 
 pub struct SamReader {
-	//unimplemented
+    buf_reader: BufReader<Box<std::io::Read>>,
 }
 
 pub struct SamWriter {
@@ -373,11 +373,9 @@ pub struct SamWriter {
 }
 
 impl SamReader {
-    //unimplemented
-    #[allow(dead_code)]
-    fn new(_filename: &str) -> Self {
-        panic!("sam reader unimplemented, sorry");
-        //SamReader {}
+    fn new(filename: &str) -> Self {
+        let reader = get_reader(filename, Uncompressed);
+        SamReader{ buf_reader: reader }
     }
 }
 
@@ -394,8 +392,14 @@ impl SamWriter {
 
 impl DnaRead for SamReader {
     fn next(&mut self) -> Option<DnaRecord> {
-        //unimplemented
-        panic!("sam reader unimplemented, sorry");
+        let mut line = String::new();
+        let mut to_ret: Option<DnaRecord> = None;
+        while !self.buf_reader.read_line(&mut line).unwrap_or(0) > 0 && !line.starts_with("@") {
+            let line: Vec<&str> = line.split_whitespace().collect();
+            assert!( line.len() > 10, "is this sam format?, error parsing");
+            to_ret = Some( DnaRecord{ name: line[0].to_string(), seq: line[9].to_string(), qual: Some(line[10].to_string()) } )
+        };
+        to_ret
     }
     fn my_type(&self) -> DnaFormat { Sam }
     fn header(&self) -> Option<bam::Header> { None }
