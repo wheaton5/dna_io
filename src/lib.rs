@@ -60,12 +60,10 @@ pub struct DnaWriter {
 
 fn check_extension(filename: &str) -> (DnaFormat, Compression) {
     let filetype = filename.split(".").collect::<Vec<&str>>();
-    //if filetype.len() < 2 { panic!("file {} has no extension", filename); }
     assert!(filetype.len() >= 2, "file {} has no extension", filename);
     match filetype[filetype.len()-1] {
         "gz" => {
             assert!(filetype.len() >= 3, "gz file {} has no format extension", filename);
-            //if filetype.len() < 3 { panic!("gz file {} has no format extension", filename); }           
             match filetype[filetype.len()-2] {
                 "fa" | "fasta" => (Fasta, Gzipped),
                 "fq" | "fastq" => (Fastq, Gzipped),
@@ -120,7 +118,9 @@ impl DnaWriter {
         };
         DnaWriter{ writer: writer }
     }
+    pub fn write(&mut self, rec: &DnaRecord) -> Result<(), Error> { self.writer.write(rec) }
 }
+pub fn flush(writer: DnaWriter) {} // drop out of scope and flush/free automatically
 
 impl Iterator for DnaReader {
     type Item = DnaRecord;
@@ -333,7 +333,7 @@ impl BamReader {
 impl BamWriter {
 	fn new(filename: &str, template: bam::Reader) -> Self {
 		let header = bam::Header::from_template(template.header());
-		let mut bam = bam::Writer::from_path(&"test/out.bam", &header).expect("could not open bam for writing");
+		let mut bam = bam::Writer::from_path(filename, &header).expect("could not open bam for writing");
 		BamWriter{ writer: bam }
 	}
 }
@@ -411,6 +411,12 @@ mod tests {
     use DnaReader;
     #[allow(unused_imports)]
     use DnaRecord;
+    #[allow(unused_imports)]
+    use DnaWriter;
+    use DnaWrite;
+    use std::io::Read;
+    use std::fs::File;
+    use flush;
 
     #[test]
     fn test_fastq() {
@@ -484,5 +490,22 @@ mod tests {
         };
         println!("{}",rec.seq);
         assert!("GTCCTAAAACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAAACCTAACCCTAACCATACCCATAACCCCAACCCTAACACTAACCCCAAACCCAACCATAACCAACACCCCACACCTA" == rec.seq);
+    }
+
+    #[test]
+    fn test_write_fastq() {
+        let mut reader = DnaReader::from_path("test/data/fastq.fastq");
+        let mut writer = DnaWriter::from_reader("test/data/fastq_written.fastq",&reader);
+        for rec in reader {
+            writer.write(&rec).expect("failed to write fastq file in test");
+        }
+        flush(writer);
+        let mut file = File::open("test/data/fastq.fastq").expect("test data not available");
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).expect("cant read test data");
+        let mut file2 = File::open("test/data/fastq.fastq").expect("written test data not available");
+        let mut contents2 = String::new();
+        file2.read_to_string(&mut contents2).expect("cant read written test data");
+        assert!(contents == contents2);
     }
 }
