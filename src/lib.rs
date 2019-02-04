@@ -311,7 +311,8 @@ impl DnaRead for FastaReader {
 
 impl DnaWrite for FastaWriter {
 	fn write(&mut self, rec: &DnaRecord) -> Result<(), Error> {
-		panic!("unimplemented");
+        let to_write = format!("{}\n{}\n",rec.name, rec.seq);
+        self.buf_writer.write_all(&to_write.as_bytes())
 	}
 }
 
