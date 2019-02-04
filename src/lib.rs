@@ -404,6 +404,16 @@ impl DnaRead for SamReader {
 impl DnaWrite for SamWriter {
 	fn write(&mut self, rec: &DnaRecord) -> Result<(), Error> {
 		panic!("unimplemented");
+        let mut bam_rec = bam::Record::new();
+        let qual = match rec.qual {
+            Some(ref x) => x,
+            None => panic!("what am i doing writing sam, i have no qual"),
+        };
+        bam_rec.set(&rec.name.as_bytes(), &bam::record::CigarString::from_str("").unwrap(), &rec.seq.as_bytes(), &qual.as_bytes());
+        match self.writer.write(&bam_rec) {
+            Ok(_) => Ok(()),
+            Err(_) => panic!("write error on sam write"),
+        }
 	}
 }
 
