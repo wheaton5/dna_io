@@ -2,7 +2,6 @@ extern crate flate2;
 extern crate rust_htslib;
 
 use std::io::Error;
-//pub type Result<T> = Result<T, Error>;
 
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
@@ -10,6 +9,7 @@ use flate2::write::GzEncoder;
 use std::io::BufReader;
 use std::io::BufWriter;
 use std::io::BufRead;
+use std::io::Write;
 use std::fs::File;
 
 use rust_htslib::sam;
@@ -47,7 +47,7 @@ pub trait DnaRead {
 }
 
 pub trait DnaWrite {
-    fn write(&mut self, rec: &DnaRecord) -> Result<usize, Error>;
+    fn write(&mut self, rec: &DnaRecord) -> Result<(), Error>;
 }
 
 pub struct DnaReader {
@@ -191,8 +191,13 @@ impl DnaRead for FastqReader {
 }
 
 impl DnaWrite for FastqWriter {
-    fn write(&mut self, rec: &DnaRecord) -> Result<usize, Error> {
-        panic!("unimplemented");
+    fn write(&mut self, rec: &DnaRecord) -> Result<(), Error> {
+        let qual = match rec.qual {
+            Some(ref x) => x,
+            None => panic!("I have no qual i cant write fastq"),
+        };
+        let to_write = format!("{}\n{}\n+\n{}\n",rec.name,rec.seq,qual);
+        self.buf_writer.write_all(&to_write.as_bytes())
     }
 }
 
@@ -305,7 +310,7 @@ impl DnaRead for FastaReader {
 }
 
 impl DnaWrite for FastaWriter {
-	fn write(&mut self, rec: &DnaRecord) -> Result<usize, Error> {
+	fn write(&mut self, rec: &DnaRecord) -> Result<(), Error> {
 		panic!("unimplemented");
 	}
 }
@@ -353,7 +358,7 @@ impl DnaRead for BamReader {
 }
 
 impl DnaWrite for BamWriter {
-	fn write(&mut self, rec: &DnaRecord) -> Result<usize, Error> {
+	fn write(&mut self, rec: &DnaRecord) -> Result<(), Error> {
 		panic!("unimplemented");
 	}
 }
@@ -396,7 +401,7 @@ impl DnaRead for SamReader {
 }
 
 impl DnaWrite for SamWriter {
-	fn write(&mut self, rec: &DnaRecord) -> Result<usize, Error> {
+	fn write(&mut self, rec: &DnaRecord) -> Result<(), Error> {
 		panic!("unimplemented");
 	}
 }
