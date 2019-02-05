@@ -27,7 +27,7 @@ pub enum DnaFormat {
 }
 use DnaFormat::*;
 
-#[derive(Debug)]
+#[derive(Debug,PartialEq,Clone)]
 pub enum Compression {
     Gzipped,
     Uncompressed,
@@ -44,6 +44,7 @@ pub trait DnaRead {
     fn next(&mut self) -> Option<DnaRecord>;
     fn my_type(&self) -> DnaFormat;
     fn header(&self) -> Option<bam::Header>;
+    fn extension(&self) -> String;
 }
 
 pub trait DnaWrite {
@@ -94,6 +95,7 @@ impl DnaReader {
     }
     pub fn header(&self) -> Option<bam::Header> { self.reader.header() }
     pub fn my_type(&self) -> DnaFormat { self.reader.my_type() }
+    pub fn extension(&self) -> String { self.reader.extension() }
 }
 
 // for now we will assume that output is not gz'ed. they may want to stream to another program
@@ -149,6 +151,7 @@ fn get_writer(filename: &str, compression: Compression) -> BufWriter<Box<std::io
 
 pub struct FastqReader {
     pub buf_reader: BufReader<Box<std::io::Read>>,
+    compression: Compression,
 }
 
 pub struct FastqWriter {
@@ -157,7 +160,7 @@ pub struct FastqWriter {
 
 impl FastqReader {
     fn new(filename: &str, compression: Compression) -> Self {
-        FastqReader{ buf_reader: get_reader(filename, compression) }
+        FastqReader{ buf_reader: get_reader(filename, compression.clone()) , compression: compression}
     }
 }
 
@@ -188,6 +191,11 @@ impl DnaRead for FastqReader {
     fn header(&self) -> Option<bam::Header> {
         None
     }
+    fn extension(&self) -> String {
+        let mut to_ret = ".fastq".to_string();
+        if self.compression == Gzipped { to_ret.push_str(".gz") }
+        to_ret
+    }
 }
 
 impl DnaWrite for FastqWriter {
@@ -204,6 +212,7 @@ impl DnaWrite for FastqWriter {
 pub struct FastaReader {
     pub buf_reader: BufReader<Box<std::io::Read>>,
     pub last_name: Option<String>,
+    compression: Compression,
 }
 
 pub struct FastaWriter {
@@ -212,7 +221,7 @@ pub struct FastaWriter {
 
 impl FastaReader {
     fn new(filename: &str, compression: Compression) -> Self {
-        FastaReader{ buf_reader: get_reader(filename, compression) , last_name: None}
+        FastaReader{ buf_reader: get_reader(filename, compression.clone()) , last_name: None, compression: compression}
     }
 }
 
@@ -307,6 +316,11 @@ impl DnaRead for FastaReader {
 	}
     fn header(&self) -> Option<bam::Header> { None }
     fn my_type(&self) -> DnaFormat { Fasta }
+    fn extension(&self) -> String {
+        let mut to_ret = ".fasta".to_string();
+        if self.compression == Gzipped { to_ret.push_str(".gz"); }
+        to_ret
+    }
 }
 
 impl DnaWrite for FastaWriter {
@@ -356,6 +370,7 @@ impl DnaRead for BamReader {
     }
     fn my_type(&self) -> DnaFormat { Bam }
     fn header(&self) -> Option<bam::Header> { Some(bam::Header::from_template(self.reader.header())) }
+    fn extension(&self) -> String { ".bam".to_string() }
 }
 
 impl DnaWrite for BamWriter {
@@ -403,6 +418,7 @@ impl DnaRead for SamReader {
     }
     fn my_type(&self) -> DnaFormat { Sam }
     fn header(&self) -> Option<bam::Header> { None }
+    fn extension(&self) -> String { ".sam".to_string() }
 }
 
 impl DnaWrite for SamWriter {
