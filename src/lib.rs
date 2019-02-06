@@ -248,20 +248,17 @@ impl DnaRead for FastaReader {
                             if line.starts_with(">") {
                                 next_name.push_str(&line);
                                 next_name.pop();
-                                println!("trying to break");
                                 break 'line_iter;
                             }
                             else if line.is_empty() {
                                 break 'line_iter; 
                             }
                             else {
-                                println!("pushing {}",line);
                                 seq.push_str(&line);
                                 seq.pop();
                             }
                         },
                         Err(_) => {
-                            println!("trying to return");
                             return None;
                         },
                    }      
@@ -289,18 +286,15 @@ impl DnaRead for FastaReader {
                             if line.starts_with(">") {
                                 next_name.push_str(&line);
                                 next_name.pop();
-                                println!("trying to break2");
                                 break 'line_iter2;
                             }
                             else if line.is_empty() { break 'line_iter2; }
                             else {
-                                println!("pushing2 {}",line);
                                 seq.push_str(&line);
                                 seq.pop();
                             }
                         },
                         Err(_) => {
-                            println!("trying to return 2");
                             return None;
                         },
                     }
