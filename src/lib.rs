@@ -240,6 +240,7 @@ impl DnaRead for FastaReader {
 
         match self.last_name {
             Some(ref my_name) => {
+                println!("got here");
                 name.push_str(my_name);
                 'line_iter: loop {
                     let mut line = String::new();
@@ -258,31 +259,36 @@ impl DnaRead for FastaReader {
                                 seq.pop();
                             }
                         },
-                        Err(_) => {
-                            return None;
+                        Err(err) => {
+                            panic!("{}",err);
                         },
                    }      
                 }
             },
             None => {
+                println!("first");
                 let mut line = String::new();
                 match self.buf_reader.read_line(&mut line) {
+                    
                     Ok(_) => {
+                        println!("{}",line);
                         if line.starts_with(">") {
                             name.push_str(&line);
                             name.pop();
                         } else if line.is_empty() {
+                            println!("empty");
                             return None;
                         } else {
                             panic!("not fasta format?");
                         }
                     },
-                    Err(_) => return None,
+                    Err(err) => panic!("{}",err),
                 }
                 'line_iter2: loop {
                     let mut line = String::new();
                     match self.buf_reader.read_line(&mut line) {
-                        Ok(_) => {
+                        Ok(x) => {
+                            println!("here {} {}", line,x);
                             if line.starts_with(">") {
                                 next_name.push_str(&line);
                                 next_name.pop();
@@ -294,8 +300,8 @@ impl DnaRead for FastaReader {
                                 seq.pop();
                             }
                         },
-                        Err(_) => {
-                            return None;
+                        Err(err) => {
+                            panic!("{}",err);
                         },
                     }
                 }
@@ -550,6 +556,19 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_big_fasta() {
+        println!("fork me");
+        let mut reader = DnaReader::from_path("blah.fasta");
+        let mut writer = DnaWriter::from_reader("out2.fasta", &reader);
+        for rec in reader {
+            writer.write(&rec).expect("nope");
+        }
+        assert!(2==3);
+        
+    }
+
+    
 
 
 }
